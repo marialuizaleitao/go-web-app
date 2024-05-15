@@ -1,14 +1,16 @@
 package main
 
 import (
+	"go-web-app/db"
 	"html/template"
+	"log"
 	"net/http"
 )
 
 type Produto struct {
 	Nome, Descricao string
 	Preco           float64
-	Quantidade      int
+	Id, Quantidade  int
 }
 
 var temp = template.Must(template.ParseGlob("templates/*.html"))
@@ -19,10 +21,32 @@ func main() {
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
-	produtos := []Produto{
-		{"Camiseta", "Camiseta preta de Kung Fu", 29.90, 10},
-		{"Boné", "Bóne vermelho Aba Reta", 25.99, 2},
-		{"Pulseira", "Pulseira prata com detalhes verdes", 159.99, 1},
+	// usa um pool de conexões para reutilizar conexões existentes
+	database := db.PoolDeConexoes()
+
+	selectDeTodosOsProutos, err := database.Query("SELECT nome, descricao, preco, quantidade FROM produtos")
+	if err != nil {
+		log.Fatal(err)
 	}
+	defer selectDeTodosOsProutos.Close()
+
+	var produtos []Produto
+
+	for selectDeTodosOsProutos.Next() {
+		var produto Produto
+
+		err := selectDeTodosOsProutos.Scan(&produto.Nome, &produto.Descricao, &produto.Preco, &produto.Quantidade)
+		if err != nil {
+			log.Fatal(err)
+		}
+		produtos = append(produtos, produto)
+	}
+
+	// verifica se houve algum erro durante a iteração
+	if err := selectDeTodosOsProutos.Err(); err != nil {
+		log.Fatal(err)
+	}
+
+	// executa o template com os produtos
 	temp.ExecuteTemplate(w, "Index", produtos)
 }
